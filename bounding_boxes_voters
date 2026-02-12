@@ -1,0 +1,23 @@
+voter_column 1 = [759,2652]
+voter_column 2 = [2772,4665]
+voter_column 3 = [4773,6678]
+voter_column 4 = [6789,8691]
+
+
+
+
+voter_rows 1=[732,1237]
+voter_rows 2=[1254,1759]
+voter_rows 3=[1776,2281]
+voter_rows 4=[2292,2795]
+voter_rows 5=[2818,3322]
+voter_rows 6=[3333,3839]
+voter_rows 7=[3849,4352]
+voter_rows 8=[4374,4878]
+voter_rows 9=[4893,5397]
+voter_rows 10=[5408,5914]
+
+
+
+
+extra_bounding_box(n,w,s,e)=[624,561,8079,700]

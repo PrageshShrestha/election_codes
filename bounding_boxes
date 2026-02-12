@@ -1,0 +1,19 @@
+
+#voter_xxxx_xxx.jpg inside voter_info
+voter id :[0,0,743,141]
+name :[0,141,743,275]
+age/gender :[0,275,743,416]
+parent-name :[0,416,947,518]
+spouse :[746,300,1541,390]
+picture :[1584,8,2019,549]
+
+
+
+
+#voter_xxxx_xxx_extra.jpg inside voter_extra
+district : [0,0,847,187]
+legislative_area:[2167,11,2305,165]
+provincial_area:[2926,33,3080,154]
+municipality:[3388,17,4780,154]
+ward:[5066,17,5269,157]
+booth:[5742,11,7282,187]

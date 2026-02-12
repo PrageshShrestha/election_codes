@@ -1,0 +1,13 @@
+conversion/
+output_images/
+temp_ocr_img/
+voter_extra/
+voter_images/ 
+voter_info/
+voter_images.zip 
+3_29_काभ्रेपलाञ्चोक_FC_1_SC_1.pdf
+3_29_काभ्रेपलाञ्चोक_FC_1_SC_2.pdf
+output_cleaned.csv 
+output.csv 
+requirements.txt
+gitignore
