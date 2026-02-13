@@ -16,6 +16,53 @@ import sys
 import easyocr 
 reader = easyocr.Reader(["hi"],gpu = True)
 
+
+
+
+
+
+from paddleocr import PaddleOCR  
+
+# ocr = PaddleOCR(
+#     # IMPORTANT: In 3.2.2, use this exact syntax
+#     text_recognition_model_name="devanagari_PP-OCRv3_mobile_rec",  # NOT devanagari_PP-OCRv3_mobile_rec
+#     text_recognition_model_dir=None,  # Let it download automatically
+#     use_textline_orientation=True,
+#     device="cpu",
+#     enable_mkldnn=True,  # Speed up CPU
+#     cpu_threads=4
+    
+# )
+ocr = PaddleOCR(use_angle_cls=True, lang='hi') 
+
+def preprocess_for_numbers(image_path):
+    img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+    
+    # Resize to make the digits larger (OCR likes ~30-50px height digits)
+    img = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    
+    # Apply Otsu's threshold to get clean black-and-white image
+    _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    # Save temporarily to process
+    temp_path = "temp_ocr_img/temp_num_proc.jpg"
+    cv2.imwrite(temp_path, thresh)
+    return temp_path
+def get_numbers_only(image_path):
+    # Devanagari digits: ०१२३४५६७८९
+    # English digits: 0123456789
+        # Use .ocr() NOT .predict()
+    result = ocr.ocr(image_path)
+    
+    texts = []
+    if result and result[0]:
+        for line in result[0]:
+            # Classic format: [bbox, (text, confidence)]
+            text = line[1][0]  # Text is at index 0 of the tuple
+            texts.append(text)
+            print(f"Detected: {text}")
+    
+    return " ".join(texts)
 import random
 en_to_dev_map = str.maketrans('0123456789', '०१२३४५६७८९')
 
@@ -33,25 +80,35 @@ def clean_text(value):
     val_str = val_str.translate(en_to_dev_map)
     
     return val_str
-def get_text_splitting(image_path):
-    img = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
-    dig = random.random()
+# # def get_text_splitting(image_path):
+#     img = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
+#     dig = random.random()
 
-    if dig > 0.5:
+#     if dig > 0.5:
 
-        x1,y1,x2,y2,x3,y3 = 0,0,238,103,504,103
-    else:
-        x1,y1,x2,y2,x3,y3 = 0,0,243,103,504,103
-    crop1 = img[y1:y2, x1:x2]
-    crop2 = img[y1:y2,x2:x3]
-    result1 = reader.readtext(crop1)
-    result2= reader.readtext(crop2)
+#         x1,y1,x2,y2,x3,y3 = 0,0,238,103,504,103
+#     else:
+#         x1,y1,x2,y2,x3,y3 = 0,0,243,103,504,103
+#     crop1 = img[y1:y2, x1:x2]
+#     crop2 = img[y1:y2,x2:x3]
+#     # result1 = reader.readtext(crop1)
+#     # result2= reader.readtext(crop2)
     
-    result = result1+result2
-    texts = [detection[1] for detection in result]
-    texts = "".join(texts)
+    
+#     # result = result1+result2
+#     # texts = [detection[1][0] for detection in result[0]]
+#     result = reader2.readtext(img)
+#     texts = [detection[1][0] for detection in result]
+#     texts = "".join(texts)
 
-    return texts
+#     return texts
+
+
+def get_text_splitting(image_path):
+    print("we in text spltting")
+    image_path = preprocess_for_numbers(image_path)
+    print(image_path)
+    return get_numbers_only(image_path) 
 def get_text(image_path , default = 0):
     result = reader.readtext(image_path)
 
@@ -71,12 +128,12 @@ def check_devnagari(text):
         
         # Check if character is NOT a Devanagari digit AND NOT a space
         if not ('\u0966' <= char <= '\u096F' or char.isspace()):
-            return False  # Return False immediately if any other char is found
+            return True  # Return False immediately if any other char is found
             
         i += 1
     
     # If the loop finishes, all characters were valid
-    return True
+    return False
 def parse_actual(image_path):
     """Parse voter_info image and extract text from all regions (optimized)"""
     print(f"Processing voter info: {os.path.basename(image_path)}")
@@ -115,27 +172,34 @@ def parse_actual(image_path):
         if label == "picture":
             # Optimized image saving
             save_path = os.path.join(voter_images_folder, f"{voter_id_text}.jpg")
-            cv2.imwrite(save_path, crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            cv2.imwrite(save_path, crop, [cv2.IMWRITE_JPEG_QUALITY, 100])
             listed_output.append(save_path)
         else:
             save_path = os.path.join(output_folder, f"{label}.jpg")
-            cv2.imwrite(save_path, crop, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            cv2.imwrite(save_path, crop, [cv2.IMWRITE_JPEG_QUALITY, 100])
             
             # Extract text
             text = get_text(save_path)
             if label == "voter_id":
-                not_devnagri = True
+                
+                not_devnagri = check_devnagari(text)
                 if len(text) < 4 :
                     continue
+                
                 while not_devnagri:
+                    
                     text = clean_text(text)
-                    if len(text)>4 and check_devnagari(text):
-
+                    if len(text)>4 and not check_devnagari(text):
+                        
                         not_devnagri = False
                     else:
+                        
                         text = get_text_splitting(save_path)
-                        print(text)
+                        not_devnagri = check_devnagari(text)
+                        
+                
                 voter_id_text = text
+            
             listed_output.append(text)
             
             
@@ -173,7 +237,8 @@ def parse_extra(image_path):
         
         # Extract text with optimized default
         default = 1 if label == "ward" else 0
-        text = get_text(save_path, default=default)
+        text = get_numbers_only(save_path) if label =="ward" else get_text(save_path, default=default)
+        
         listed_output.append(text)
     
     return listed_output
@@ -194,6 +259,8 @@ def main():
     with open("output.csv", "w", newline='', encoding='utf-8', buffering=8192) as csvfile:
         fieldnames = ["voter_id", "name", "age_gender", "parent_name", "spouse", "sn",
                    "picture", "municipality", "ward", "booth"]
+        clear_temp_folder("voter_images")
+        clear_temp_folder("temp_ocr_img")
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         csvfile.flush()
