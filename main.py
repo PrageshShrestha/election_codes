@@ -16,9 +16,42 @@ import sys
 import easyocr 
 reader = easyocr.Reader(["hi"],gpu = True)
 
+import random
+en_to_dev_map = str.maketrans('0123456789', '०१२३४५६७८९')
 
+def clean_text(value):
+    """Removes all spaces and converts English digits to Devanagari."""
+    
+    
+    # Convert to string to handle any data type
+    val_str = str(value)
+    
+    # Step 1: Remove all spaces
+    val_str = val_str.replace(" ", "")
+    
+    # Step 2: Translate English digits to Devanagari digits
+    val_str = val_str.translate(en_to_dev_map)
+    
+    return val_str
+def get_text_splitting(image_path):
+    img = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
+    dig = random.random()
 
+    if dig > 0.5:
 
+        x1,y1,x2,y2,x3,y3 = 0,0,238,103,504,103
+    else:
+        x1,y1,x2,y2,x3,y3 = 0,0,243,103,504,103
+    crop1 = img[y1:y2, x1:x2]
+    crop2 = img[y1:y2,x2:x3]
+    result1 = reader.readtext(crop1)
+    result2= reader.readtext(crop2)
+    
+    result = result1+result2
+    texts = [detection[1] for detection in result]
+    texts = "".join(texts)
+
+    return texts
 def get_text(image_path , default = 0):
     result = reader.readtext(image_path)
 
@@ -26,7 +59,24 @@ def get_text(image_path , default = 0):
     texts = " ".join(texts)
 
     return texts
-
+def check_devnagari(text):
+    # If text is empty, return False
+    if not text:
+        return False
+    
+    i = 0
+    # The Unicode range for Devanagari digits is ० (\u0966) to ९ (\u096F)
+    while i < len(text):
+        char = text[i]
+        
+        # Check if character is NOT a Devanagari digit AND NOT a space
+        if not ('\u0966' <= char <= '\u096F' or char.isspace()):
+            return False  # Return False immediately if any other char is found
+            
+        i += 1
+    
+    # If the loop finishes, all characters were valid
+    return True
 def parse_actual(image_path):
     """Parse voter_info image and extract text from all regions (optimized)"""
     print(f"Processing voter info: {os.path.basename(image_path)}")
@@ -50,6 +100,7 @@ def parse_actual(image_path):
         "age_gender": [0, 251, 623, 375],
         "parent_name": [0, 374, 1400, 488],
         "spouse": [710, 251, 1458, 374],
+        "sn":[870,23,1466,131],
         "picture": [1466, 3, 1899, 415]
     }
     
@@ -72,10 +123,22 @@ def parse_actual(image_path):
             
             # Extract text
             text = get_text(save_path)
+            if label == "voter_id":
+                not_devnagri = True
+                if len(text) < 4 :
+                    continue
+                while not_devnagri:
+                    text = clean_text(text)
+                    if len(text)>4 and check_devnagari(text):
+
+                        not_devnagri = False
+                    else:
+                        text = get_text_splitting(save_path)
+                        print(text)
+                voter_id_text = text
             listed_output.append(text)
             
-            if label == "voter_id":
-                voter_id_text = text
+            
     
     return listed_output
 
@@ -129,7 +192,7 @@ def main():
     
     # Setup CSV file with optimized buffering
     with open("output.csv", "w", newline='', encoding='utf-8', buffering=8192) as csvfile:
-        fieldnames = ["voter_id", "name", "age_gender", "parent_name", "spouse", 
+        fieldnames = ["voter_id", "name", "age_gender", "parent_name", "spouse", "sn",
                    "picture", "municipality", "ward", "booth"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
@@ -168,13 +231,13 @@ def main():
                 clear_temp_folder("temp_ocr_img")
                 name_only = image_path.name
                 img1 = image_path 
-                img2_name = f"{name_only[:10]}.jpg"
+                img2_name = f"{name_only[:15]}.jpg"
                 
                 if temp_extra_name != img2_name:
                     img2 = Path(f"voter_extra/{img2_name}")
                     var2 = parse_extra(img2) 
                     temp_extra_name = img2_name
-                
+                   
                 # Process main image
                 var1 = parse_actual(img1)
                 
