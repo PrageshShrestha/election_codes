@@ -16,53 +16,107 @@ import sys
 import easyocr 
 reader = easyocr.Reader(["hi"],gpu = True)
 
+reader2 = easyocr.Reader(["hi"],gpu = True)
 
 
 
 
+import pytesseract
+import cv2
+import numpy as np
 
-from paddleocr import PaddleOCR  
 
-# ocr = PaddleOCR(
-#     # IMPORTANT: In 3.2.2, use this exact syntax
-#     text_recognition_model_name="devanagari_PP-OCRv3_mobile_rec",  # NOT devanagari_PP-OCRv3_mobile_rec
-#     text_recognition_model_dir=None,  # Let it download automatically
-#     use_textline_orientation=True,
-#     device="cpu",
-#     enable_mkldnn=True,  # Speed up CPU
-#     cpu_threads=4
+import easyocr
+import cv2
+import numpy as np
+import os
+
+reader = easyocr.Reader(['hi'], gpu=True)
+
+def get_numbers_only(image_path: str, text_threshold: float = 0.6) -> str:
+    if not os.path.exists(image_path):
+        return ""
     
-# )
-ocr = PaddleOCR(use_angle_cls=True, lang='hi') 
-
+    img = cv2.imread(image_path)
+    if img is None:
+        return ""
+    
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    os.makedirs("filtered_images", exist_ok=True)
+    
+    best_numbers = ""
+    best_score = -1.0
+    
+    allowlist = '०१२३४५६७८९'
+    
+    def try_ocr_numbers(preprocessed_img):
+        nonlocal best_numbers, best_score
+        temp_path = "filtered_images/temp_num.jpg"
+        cv2.imwrite(temp_path, preprocessed_img)
+        
+        result = reader.readtext(
+            temp_path,
+            allowlist=allowlist,
+            text_threshold=text_threshold
+        )
+        
+        if not result:
+            return
+        
+        score = sum(d[2] for d in result)
+        numbers = "".join(d[1] for d in result)
+        
+        if score > best_score:
+            best_score = score
+            best_numbers = numbers
+    
+    try_ocr_numbers(img)
+    try_ocr_numbers(gray)
+    
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    try_ocr_numbers(binary)
+    
+    adaptive = cv2.adaptiveThreshold(
+        gray, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY, 11, 2
+    )
+    try_ocr_numbers(adaptive)
+    
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    contrast = clahe.apply(gray)
+    try_ocr_numbers(contrast)
+    
+    kernel_sharp = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    sharpened = cv2.filter2D(gray, -1, kernel_sharp)
+    try_ocr_numbers(sharpened)
+    
+    h, w = gray.shape
+    resized = cv2.resize(gray, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
+    try_ocr_numbers(resized)
+    
+    denoised = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
+    try_ocr_numbers(denoised)
+    
+    return best_numbers
 def preprocess_for_numbers(image_path):
-    img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+    img=cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
-    # Resize to make the digits larger (OCR likes ~30-50px height digits)
-    img = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    sharpen_kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    sharpened = cv2.filter2D(gray, -1, sharpen_kernel)
+    inverted_path = "temp_ocr_img/inverted_num.jpg"
+    cv2.imwrite(inverted_path, sharpened)
     
-    # Apply Otsu's threshold to get clean black-and-white image
-    _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return inverted_path
+
+# def get_numbers_only(image_path):
+   
+#     result = reader2.readtext(image_path,allowlist = ['०','१','२''३','४','५','६','७','८','९'])
     
-    # Save temporarily to process
-    temp_path = "temp_ocr_img/temp_num_proc.jpg"
-    cv2.imwrite(temp_path, thresh)
-    return temp_path
-def get_numbers_only(image_path):
-    # Devanagari digits: ०१२३४५६७८९
-    # English digits: 0123456789
-        # Use .ocr() NOT .predict()
-    result = ocr.ocr(image_path)
-    
-    texts = []
-    if result and result[0]:
-        for line in result[0]:
-            # Classic format: [bbox, (text, confidence)]
-            text = line[1][0]  # Text is at index 0 of the tuple
-            texts.append(text)
-            print(f"Detected: {text}")
-    
-    return " ".join(texts)
+#     texts = [detection[1] for detection in result]
+#     texts = "".join(texts)
+#     return texts
 import random
 en_to_dev_map = str.maketrans('0123456789', '०१२३४५६७८९')
 
@@ -105,10 +159,12 @@ def clean_text(value):
 
 
 def get_text_splitting(image_path):
-    print("we in text spltting")
-    image_path = preprocess_for_numbers(image_path)
-    print(image_path)
-    return get_numbers_only(image_path) 
+
+    # image_path = preprocess_for_numbers(image_path)
+    # text = get_numbers_only(image_path)
+    return get_numbers_only(image_path)
+    
+    
 def get_text(image_path , default = 0):
     result = reader.readtext(image_path)
 
@@ -179,27 +235,15 @@ def parse_actual(image_path):
             cv2.imwrite(save_path, crop, [cv2.IMWRITE_JPEG_QUALITY, 100])
             
             # Extract text
+            
             text = get_text(save_path)
             if label == "voter_id":
-                
-                not_devnagri = check_devnagari(text)
-                if len(text) < 4 :
-                    continue
-                
-                while not_devnagri:
-                    
-                    text = clean_text(text)
-                    if len(text)>4 and not check_devnagari(text):
-                        
-                        not_devnagri = False
-                    else:
-                        
+                if len(text)>4:
+                    while len(text) != 8:
                         text = get_text_splitting(save_path)
-                        not_devnagri = check_devnagari(text)
-                        
-                
-                voter_id_text = text
-            
+                    voter_id_text = text
+                else:
+                    continue
             listed_output.append(text)
             
             
@@ -223,7 +267,7 @@ def parse_extra(image_path):
     # Optimized regions dictionary
     regions = {
         "municipality": [3394, 11, 4800, 139],
-        "ward": [4800, 17, 5280, 139],
+        "ward": [5063, 17, 5280, 139],
         "booth": [5752, 11, 7354, 139]
     }
     
