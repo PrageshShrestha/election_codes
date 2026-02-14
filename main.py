@@ -80,10 +80,10 @@ def crop_then_paste(image_path):
         
         
         
-        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray, 50, 150)
-        kernel = np.ones((3,3), np.uint8)
-        crop = cv2.dilate(edges, kernel, iterations=1)
+        # gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        # edges = cv2.Canny(gray, 50, 150)
+        # kernel = np.ones((3,3), np.uint8)
+        # crop = cv2.dilate(edges, kernel, iterations=1)
         x = cv2.imwrite(f"filtered_images/{label}.png", crop)
         image_path = cv2.imread(f"filtered_images/{label}.png")
         
@@ -91,11 +91,11 @@ def crop_then_paste(image_path):
         try:
             texts = [detection[1][0] for detection in result]
             texts = "".join(texts)
-            smart_copy(f"filtered_images/{label}.png", f"garbage_collector/{texts}")
+            
         except:
             texts = ""
-        
-        digits.append(texts)
+        if texts in "०१२३४५६७८९":
+            digits.append(texts)
     text = "".join(digits)
 
     return text
@@ -114,73 +114,104 @@ def get_numbers_only(image_path: str) -> str:
     if img is None:
         return ""
     some_new = random.random()
-    if 0.6<some_new<0.8:
+    if 0.1<some_new<0.12:
         return crop_then_paste(image_path)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    os.makedirs("filtered_images", exist_ok=True)
-    
-    best_numbers = ""
-    best_score = -1.0
-    
-    allowlist = '०१२३४५६७८९'
-    
-    def try_ocr_numbers(preprocessed_img):
-
-
-
-
-        
-        nonlocal best_numbers, best_score
-        temp_path = "filtered_images/temp_num.jpg"
-        cv2.imwrite(temp_path, preprocessed_img)
-        
-        result = reader.readtext(
-            temp_path,
-            allowlist=allowlist,
-            text_threshold=text_threshold
-        )
-        
-        if not result:
-            return
-        
-        score = sum(d[2] for d in result)
-        numbers = "".join(d[1] for d in result)
-        
-        if score > best_score:
-            best_score = score
-            best_numbers = numbers
-    
-    try_ocr_numbers(img)
-    try_ocr_numbers(gray)
-    
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    try_ocr_numbers(binary)
-    
-    c = random.randint(0,5)
-    adaptive = cv2.adaptiveThreshold(
-        gray, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 9, c
-    )
-    try_ocr_numbers(adaptive)
-    
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    contrast = clahe.apply(gray)
-    try_ocr_numbers(contrast)
-    
-    kernel_sharp = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-    sharpened = cv2.filter2D(gray, -1, kernel_sharp)
-    try_ocr_numbers(sharpened)
-    
-    h, w = gray.shape
-    resized = cv2.resize(gray, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
-    try_ocr_numbers(resized)
-    h = random.randint(1,10)
-    denoised = cv2.fastNlMeansDenoising(gray, None, h=h, templateWindowSize=7, searchWindowSize=21)
-    try_ocr_numbers(denoised)
     inverted = cv2.bitwise_not(gray)
-    try_ocr_numbers(inverted)
-    return best_numbers
+    temp_path = "filtered_images/temp_num.jpg"
+    cv2.imwrite(temp_path, inverted)
+    allowlist = '०१२३४५६७८९'
+    result = reader.readtext(
+        temp_path,
+        allowlist=allowlist,
+        text_threshold=text_threshold
+    )
+    
+    if not result:
+        return "01"
+    
+    
+    numbers = "".join(d[1] for d in result)
+    while len(numbers) < 7 and some_new>0.6:
+        numbers = crop_then_paste(image_path)
+        some_new = random.random()
+        h = random.randint(1,10)
+        if some_new<0.5:
+            denoised = cv2.fastNlMeansDenoising(gray, None, h=h, templateWindowSize=7, searchWindowSize=21)
+            cv2.imwrite(temp_path, denoised)
+            allowlist = '०१२३४५६७८९'
+            result = reader.readtext(
+        temp_path,
+        allowlist=allowlist,
+        text_threshold=text_threshold
+            )
+            numbers = "".join(d[1] for d in result if d[1] in allowlist)
+    return numbers
+    # os.makedirs("filtered_images", exist_ok=True)
+    
+    # best_numbers = ""
+    # best_score = -1.0
+    
+    # allowlist = '०१२३४५६७८९'
+    
+    # def try_ocr_numbers(preprocessed_img):
+
+
+
+
+        
+    #     nonlocal best_numbers, best_score
+    #     temp_path = "filtered_images/temp_num.jpg"
+    #     cv2.imwrite(temp_path, preprocessed_img)
+        
+    #     result = reader.readtext(
+    #         temp_path,
+    #         allowlist=allowlist,
+    #         text_threshold=text_threshold
+    #     )
+        
+    #     if not result:
+    #         return
+        
+    #     score = sum(d[2] for d in result)
+    #     numbers = "".join(d[1] for d in result)
+    #     print(numbers , score)
+    #     if score > best_score:
+    #         best_score = score
+    #         best_numbers = numbers
+    
+    # try_ocr_numbers(img)
+    # try_ocr_numbers(gray)
+    
+    # _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # try_ocr_numbers(binary)
+    
+    # c = random.randint(0,5)
+    # adaptive = cv2.adaptiveThreshold(
+    #     gray, 255,
+    #     cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+    #     cv2.THRESH_BINARY, 9, c
+    # )
+    # try_ocr_numbers(adaptive)
+    
+    # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    # contrast = clahe.apply(gray)
+    # try_ocr_numbers(contrast)
+    
+    # kernel_sharp = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    # sharpened = cv2.filter2D(gray, -1, kernel_sharp)
+    # try_ocr_numbers(sharpened)
+    
+    # h, w = gray.shape
+    # resized = cv2.resize(gray, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
+    # try_ocr_numbers(resized)
+    # h = random.randint(1,10)
+    # denoised = cv2.fastNlMeansDenoising(gray, None, h=h, templateWindowSize=7, searchWindowSize=21)
+    # try_ocr_numbers(denoised)
+    # inverted = cv2.bitwise_not(gray)
+    # try_ocr_numbers(inverted)
+    # return best_numbers
+
 def preprocess_for_numbers(image_path):
     img=cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
     grscale = random.randint(200,255)
@@ -291,7 +322,7 @@ def parse_actual(image_path):
 
     # Optimized regions dictionary
     regions = {
-        "voter_id": [0, 0, 512, 107],
+        "voter_id": [0, 20, 512, 107],
         "name": [8, 114, 843, 240],
         "age_gender": [0, 251, 623, 375],
         "parent_name": [0, 374, 1400, 488],
@@ -322,7 +353,7 @@ def parse_actual(image_path):
             text = get_text(save_path)
             if label == "voter_id":
                 if len(text)>2:
-                    while len(text) != 8:
+                    while len(text) < 7:
                         text = get_text_splitting(save_path)
                         print(text)
                     voter_id_text = text
@@ -391,13 +422,10 @@ def main():
         clear_temp_folder("temp_ocr_img")
         clear_temp_folder("garbage_collector")
 
-        for i in "०१२३४५६७८९":
-
-
-            path = f"garbage_collector/{i}"
+        
 
 # This is the equivalent of the pathlib method above
-            os.makedirs(path, exist_ok=True)
+           
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         csvfile.flush()
