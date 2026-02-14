@@ -1,4 +1,5 @@
 from pathlib import Path
+from traceback import print_exc
 from PIL import Image
 import time
 import cv2
@@ -12,7 +13,7 @@ import tempfile
 import shutil
 import signal
 import sys
-
+import traceback
 import easyocr 
 reader = easyocr.Reader(["hi"],gpu = True)
 
@@ -30,17 +31,91 @@ import easyocr
 import cv2
 import numpy as np
 import os
+import shutil
+from pathlib import Path
 
-reader = easyocr.Reader(['hi'], gpu=True)
 
-def get_numbers_only(image_path: str, text_threshold: float = 0.6) -> str:
+
+
+def smart_copy(source_path, dest_folder):
+    src = Path(source_path)
+    dest_dir = Path(dest_folder)
+    
+    # Ensure destination directory exists
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Start with the original filename
+    new_name = src.name
+    dest_path = dest_dir / new_name
+    counter = 1
+
+    # Loop until we find a filename that doesn't exist
+    while dest_path.exists():
+        new_name = f"{src.stem}_{counter}{src.suffix}"
+        dest_path = dest_dir / new_name
+        counter += 1
+
+    shutil.copy2(src, dest_path)
+    print(f"Copied to: {dest_path}")
+
+# Example usage:
+
+def crop_then_paste(image_path):
+    img = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
+    regions = {
+        "1": [10, 10, 65, 107],
+        "2": [62, 8, 135,110],
+        "3": [129, 7, 191,100],
+        "4": [182,10,240,100],
+        "5": [236,10,303,97],
+        "6":[295,10,353,102],
+        "7": [343,13,406,101],
+        "8": [401,11, 502,98]
+    }
+
+    digits = []
+    for label, coords in regions.items():
+        x1, y1, x2, y2 = coords
+        crop = img[y1:y2, x1:x2]
+        
+        
+        
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 50, 150)
+        kernel = np.ones((3,3), np.uint8)
+        crop = cv2.dilate(edges, kernel, iterations=1)
+        x = cv2.imwrite(f"filtered_images/{label}.png", crop)
+        image_path = cv2.imread(f"filtered_images/{label}.png")
+        
+        result = reader2.readtext(image_path,allowlist = "०१२३४५६७८९")
+        try:
+            texts = [detection[1][0] for detection in result]
+            texts = "".join(texts)
+            smart_copy(f"filtered_images/{label}.png", f"garbage_collector/{texts}")
+        except:
+            texts = ""
+        
+        digits.append(texts)
+    text = "".join(digits)
+
+    return text
+    
+
+
+
+
+
+
+def get_numbers_only(image_path: str) -> str:
     if not os.path.exists(image_path):
         return ""
-    
+    text_threshold = random.random()
     img = cv2.imread(image_path)
     if img is None:
         return ""
-    
+    some_new = random.random()
+    if 0.6<some_new<0.8:
+        return crop_then_paste(image_path)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     os.makedirs("filtered_images", exist_ok=True)
     
@@ -50,6 +125,11 @@ def get_numbers_only(image_path: str, text_threshold: float = 0.6) -> str:
     allowlist = '०१२३४५६७८९'
     
     def try_ocr_numbers(preprocessed_img):
+
+
+
+
+        
         nonlocal best_numbers, best_score
         temp_path = "filtered_images/temp_num.jpg"
         cv2.imwrite(temp_path, preprocessed_img)
@@ -76,10 +156,11 @@ def get_numbers_only(image_path: str, text_threshold: float = 0.6) -> str:
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     try_ocr_numbers(binary)
     
+    c = random.randint(0,5)
     adaptive = cv2.adaptiveThreshold(
         gray, 255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
+        cv2.THRESH_BINARY, 9, c
     )
     try_ocr_numbers(adaptive)
     
@@ -94,14 +175,16 @@ def get_numbers_only(image_path: str, text_threshold: float = 0.6) -> str:
     h, w = gray.shape
     resized = cv2.resize(gray, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
     try_ocr_numbers(resized)
-    
-    denoised = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
+    h = random.randint(1,10)
+    denoised = cv2.fastNlMeansDenoising(gray, None, h=h, templateWindowSize=7, searchWindowSize=21)
     try_ocr_numbers(denoised)
-    
+    inverted = cv2.bitwise_not(gray)
+    try_ocr_numbers(inverted)
     return best_numbers
 def preprocess_for_numbers(image_path):
     img=cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    grscale = random.randint(200,255)
+    gray = cv2.cvtColor(img,grscale)
     
     sharpen_kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
     sharpened = cv2.filter2D(gray, -1, sharpen_kernel)
@@ -238,9 +321,10 @@ def parse_actual(image_path):
             
             text = get_text(save_path)
             if label == "voter_id":
-                if len(text)>4:
+                if len(text)>2:
                     while len(text) != 8:
                         text = get_text_splitting(save_path)
+                        print(text)
                     voter_id_text = text
                 else:
                     continue
@@ -281,7 +365,7 @@ def parse_extra(image_path):
         
         # Extract text with optimized default
         default = 1 if label == "ward" else 0
-        text = get_numbers_only(save_path) if label =="ward" else get_text(save_path, default=default)
+        text =get_text(save_path, default=default)
         
         listed_output.append(text)
     
@@ -305,6 +389,15 @@ def main():
                    "picture", "municipality", "ward", "booth"]
         clear_temp_folder("voter_images")
         clear_temp_folder("temp_ocr_img")
+        clear_temp_folder("garbage_collector")
+
+        for i in "०१२३४५६७८९":
+
+
+            path = f"garbage_collector/{i}"
+
+# This is the equivalent of the pathlib method above
+            os.makedirs(path, exist_ok=True)
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         csvfile.flush()
@@ -380,7 +473,8 @@ def main():
                     eta = avg_time * (total_files - processed_count)
                 
             except Exception as e:
-                print(f"\nError processing voter {i}: {e}")
+                traceback.print_exc()
+                #print(f"\nError processing voter {i}: {e}")
                 # Write empty row to maintain CSV structure
                 empty_row = {field: "" for field in fieldnames}
                 writer.writerow(empty_row)
